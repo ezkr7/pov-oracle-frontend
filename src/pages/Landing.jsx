@@ -1,6 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import React, { useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
 import { Shield, Lock, Award, ArrowRight, ChevronRight, Zap, CheckCircle } from 'lucide-react';
 
@@ -38,18 +37,16 @@ function AnimatedGrid() {
 }
 
 export default function Landing() {
-  const navigate = useNavigate();
-
   const handleGetStarted = () => {
-    base44.auth.redirectToLogin('/onboarding');
+    window.location.href = 'https://trust-oracle-core.base44.app/onboarding';
   };
 
   const handleLogin = () => {
-    base44.auth.redirectToLogin('/dashboard');
+    window.location.href = 'https://trust-oracle-core.base44.app/login';
   };
 
   const handleSignUp = () => {
-    base44.auth.redirectToLogin('/onboarding');
+    window.location.href = 'https://trust-oracle-core.base44.app/signup';
   };
 
   return (
