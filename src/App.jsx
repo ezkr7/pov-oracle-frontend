@@ -29,29 +29,31 @@ function RedirectToLogin({ next }) {
   );
 }
 
-const PUBLIC_PATHS = ['/', '/landing', '/signup', '/login', '/onboarding', '/add-agent'];
+/** Normalize pathname so `/` and `/landing` match regardless of trailing slash. */
+function isPublicLandingPath(pathname) {
+  const p = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+  return p === '/' || p === '/landing';
+}
 
-const AuthenticatedApp = () => {
+/**
+ * Landing only: no useAuth() — renders immediately without Base44 auth / public-settings wait.
+ */
+function PublicLandingShell() {
+  return (
+    <PersonaProvider>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/landing" element={<Landing />} />
+      </Routes>
+    </PersonaProvider>
+  );
+}
+
+/**
+ * Everything except `/` and `/landing`: auth + public settings gate, then protected app routes.
+ */
+function AuthGatedApp() {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
-  const location = useLocation();
-
-  const isPublic = PUBLIC_PATHS.includes(location.pathname);
-
-  // Always render public routes immediately — no auth gate
-  if (isPublic) {
-    return (
-      <PersonaProvider>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/landing" element={<Landing />} />
-          <Route path="/signup" element={<RedirectToLogin next="/onboarding" />} />
-          <Route path="/login" element={<RedirectToLogin next="/dashboard" />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/add-agent" element={<AddAgent />} />
-        </Routes>
-      </PersonaProvider>
-    );
-  }
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -78,7 +80,10 @@ const AuthenticatedApp = () => {
   return (
     <PersonaProvider>
       <Routes>
-        {/* App routes */}
+        <Route path="/signup" element={<RedirectToLogin next="/onboarding" />} />
+        <Route path="/login" element={<RedirectToLogin next="/dashboard" />} />
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/add-agent" element={<AddAgent />} />
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/transactions" element={<Transactions />} />
@@ -90,14 +95,22 @@ const AuthenticatedApp = () => {
       </Routes>
     </PersonaProvider>
   );
-};
+}
+
+function RouterShell() {
+  const location = useLocation();
+  if (isPublicLandingPath(location.pathname)) {
+    return <PublicLandingShell />;
+  }
+  return <AuthGatedApp />;
+}
 
 function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router>
-          <AuthenticatedApp />
+          <RouterShell />
         </Router>
         <Toaster />
       </QueryClientProvider>
