@@ -1,5 +1,34 @@
 const BASE_URL = 'https://pov-oracle-production.up.railway.app';
 
+function truthyConfig(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes';
+  }
+  return false;
+}
+
+/**
+ * Normalize /api/status flags so the dashboard always reads canonical snake_case.
+ * Handles camelCase aliases and string booleans from proxies or older payloads.
+ */
+function coerceOracleStatusPayload(data) {
+  if (data == null || typeof data !== 'object') return data;
+  const d = data;
+  const anyTrue = (...keys) => keys.some((k) => truthyConfig(d[k]));
+  return {
+    ...d,
+    solana_rpc_configured: anyTrue('solana_rpc_configured', 'solanaRpcConfigured', 'solana_rpc_available'),
+    ed25519_key_configured: anyTrue(
+      'ed25519_key_configured',
+      'ed25519KeyConfigured',
+      'ed25519_configured',
+      'signing_key_configured'
+    ),
+  };
+}
+
 async function apiFetch(path, options = {}) {
   const start = performance.now();
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -36,7 +65,10 @@ async function fetchJsonLoose(path) {
 }
 
 export async function fetchStatus() {
-  return apiFetch('/api/status');
+  const raw = await apiFetch('/api/status');
+  const data =
+    raw.data != null && typeof raw.data === 'object' ? coerceOracleStatusPayload(raw.data) : raw.data;
+  return { ...raw, data };
 }
 
 export async function fetchQuote() {
@@ -212,7 +244,7 @@ export async function fetchVerifications() {
 
 export async function fetchEscrowDashboard() {
   // The /escrow endpoint is HTML, use the API status for data
-  return apiFetch('/api/status');
+  return fetchStatus();
 }
 
 export async function verifyCertificate(certificateJson, publicKey) {

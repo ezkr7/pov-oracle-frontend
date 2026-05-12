@@ -31,7 +31,7 @@ export default function BusinessStats({ statusData }) {
     },
     {
       label: 'Ed25519 Key',
-      value: statusData?.ed25519_key_configured ? 'Active' : 'Missing',
+      value: statusData?.ed25519_key_configured ? 'Configured' : 'Missing',
       icon: statusData?.ed25519_key_configured ? CheckCircle : AlertTriangle,
       color: statusData?.ed25519_key_configured ? 'text-emerald-400' : 'text-amber-400',
       bg: statusData?.ed25519_key_configured ? 'bg-emerald-400/10' : 'bg-amber-400/10',
