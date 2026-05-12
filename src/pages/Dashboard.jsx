@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, DollarSign, CheckCircle, AlertTriangle } from 'lucide-react';
+import { TrendingUp, DollarSign, CheckCircle } from 'lucide-react';
 import { usePersona } from '@/lib/PersonaContext';
 import { useApiStatus } from '@/lib/useApiStatus';
 import { fetchStatus, fetchVerifications } from '@/lib/api';
@@ -127,8 +127,6 @@ export default function Dashboard() {
         ? 'Real-time overview of verifications, escrows, and certificates across all agent transactions.'
         : 'Live service metrics and recent activity. All data pulled from production endpoints.';
 
-  const ed25519Ok =
-    statusData?.ed25519_key_configured === true || statusData?.ed25519_key_configured === 'true';
   const solanaOk =
     statusData?.solana_rpc_configured === true || statusData?.solana_rpc_configured === 'true';
 
@@ -154,13 +152,6 @@ export default function Dashboard() {
       color: solanaOk ? 'text-emerald-400' : 'text-red-400',
       bg: solanaOk ? 'bg-emerald-400/10' : 'bg-red-400/10',
     },
-    {
-      label: 'Ed25519 Key',
-      value: ed25519Ok ? 'Configured' : 'Missing',
-      icon: ed25519Ok ? CheckCircle : AlertTriangle,
-      color: ed25519Ok ? 'text-emerald-400' : 'text-amber-400',
-      bg: ed25519Ok ? 'bg-emerald-400/10' : 'bg-amber-400/10',
-    },
   ];
 
   console.log(
@@ -184,7 +175,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">{heroSubtitle}</p>
       </motion.div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
         {statusTiles.map((stat, i) => (
           <motion.div
             key={stat.label}
