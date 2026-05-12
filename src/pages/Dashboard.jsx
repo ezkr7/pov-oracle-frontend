@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { usePersona } from '@/lib/PersonaContext';
 import { useApiStatus } from '@/lib/useApiStatus';
@@ -46,49 +46,64 @@ export default function Dashboard() {
   const [elapsed, setElapsed] = useState({ v: null, e: null, c: null });
   const [modal, setModal] = useState({ open: false, title: '', data: [] });
 
+  /** After first successful loadData completion, never show skeleton again (avoids poll / overlap flicker). */
+  const hasLoadedOnce = useRef(false);
+  /** Skip a new interval tick if the previous fetch is still in flight (prevents double setLoading(true)). */
+  const loadBusy = useRef(false);
+
   const loadData = useCallback(async () => {
-    setLoading({ v: true, e: true, c: true });
-
+    if (loadBusy.current) return;
+    loadBusy.current = true;
     try {
-      console.log('[Dashboard] loadData: calling fetchVerifications()');
-      const res = await fetchVerifications();
-      console.log(
-        '[Dashboard] loadData: fetchVerifications result',
-        'ok=',
-        res.ok,
-        'status=',
-        res.status,
-        'elapsed=',
-        res.elapsed,
-        'data keys=',
-        res.data && typeof res.data === 'object' ? Object.keys(res.data) : res.data
-      );
-      const rawList = Array.isArray(res.data?.verifications) ? res.data.verifications : [];
-      console.log('[Dashboard] loadData: verifications array length', rawList.length);
-      if (rawList.length > 0) {
-        console.log('[Dashboard] loadData: first row sample', rawList[0]);
+      if (!hasLoadedOnce.current) {
+        setLoading({ v: true, e: true, c: true });
       }
-      const items = rawList.map(mapVerificationRow);
-      setVerifications(items);
-      const certList = Array.isArray(res.data?.certificates) ? res.data.certificates : [];
-      console.log('[Dashboard] loadData: certificates (issued) count', certList.length);
-      setCertificates(certList);
-      setElapsed((prev) => ({ ...prev, v: res.elapsed }));
-    } catch (e) {
-      console.error('[Dashboard] loadData: fetchVerifications threw', e);
-      setVerifications([]);
-      setCertificates([]);
-    }
-    setLoading((prev) => ({ ...prev, v: false }));
 
-    try {
-      const res = await fetchStatus();
-      setEscrows([]);
-      setElapsed((prev) => ({ ...prev, e: res.elapsed, c: res.elapsed }));
-    } catch {
-      setEscrows([]);
+      try {
+        console.log('[Dashboard] loadData: calling fetchVerifications()');
+        const res = await fetchVerifications();
+        console.log(
+          '[Dashboard] loadData: fetchVerifications result',
+          'ok=',
+          res.ok,
+          'status=',
+          res.status,
+          'elapsed=',
+          res.elapsed,
+          'data keys=',
+          res.data && typeof res.data === 'object' ? Object.keys(res.data) : res.data
+        );
+        if (res.ok) {
+          const rawList = Array.isArray(res.data?.verifications) ? res.data.verifications : [];
+          console.log('[Dashboard] loadData: verifications array length', rawList.length);
+          if (rawList.length > 0) {
+            console.log('[Dashboard] loadData: first row sample', rawList[0]);
+          }
+          const items = rawList.map(mapVerificationRow);
+          setVerifications(items);
+          const certList = Array.isArray(res.data?.certificates) ? res.data.certificates : [];
+          console.log('[Dashboard] loadData: certificates (issued) count', certList.length);
+          setCertificates(certList);
+          setElapsed((prev) => ({ ...prev, v: res.elapsed }));
+        } else {
+          console.warn('[Dashboard] loadData: fetchVerifications not ok, keeping prior data', res.status);
+        }
+      } catch (e) {
+        console.error('[Dashboard] loadData: fetchVerifications threw', e);
+      }
+
+      try {
+        const res = await fetchStatus();
+        setEscrows([]);
+        setElapsed((prev) => ({ ...prev, e: res.elapsed, c: res.elapsed }));
+      } catch {
+        setEscrows([]);
+      }
+    } finally {
+      hasLoadedOnce.current = true;
+      setLoading({ v: false, e: false, c: false });
+      loadBusy.current = false;
     }
-    setLoading((prev) => ({ ...prev, e: false, c: false }));
   }, []);
 
   useEffect(() => {
