@@ -38,7 +38,6 @@ function mapVerificationRow(v) {
 export default function Dashboard() {
   const { persona, term } = usePersona();
   const { statusData } = useApiStatus();
-  console.log('RAW STATUS DATA:', statusData);
 
   const [verifications, setVerifications] = useState([]);
   const [escrows, setEscrows] = useState([]);
