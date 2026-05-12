@@ -27,7 +27,7 @@ export async function fetchEscrows() {
 }
 
 export async function fetchVerifications() {
-  return apiFetch('/api/v1/oracle/agent-history/demo-agent');
+  return apiFetch('/api/v1/oracle/agent-history/demo-agent?limit=50');
 }
 
 export async function fetchEscrowDashboard() {
