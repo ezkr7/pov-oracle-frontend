@@ -1,93 +1,93 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X, Send, ExternalLink, ChevronDown } from 'lucide-react';
+import { Sparkles, Send, ChevronDown } from 'lucide-react';
 import { usePersona } from '@/lib/PersonaContext';
-import { base44 } from '@/api/base44Client';
-import { BASE_URL } from '@/lib/api';
 
 const SESSION_KEY = 'oracle_chat_messages';
+
+const ANTHROPIC_SYSTEM =
+  'You are the PoV Oracle AI assistant. You help users understand their AI agent verification history, escrow transactions, and certificates. You are knowledgeable about blockchain notarization, hallucination detection, and AI agent accountability. Keep responses concise and helpful.';
 
 const PERSONA_CONFIG = {
   developer: {
     subtitle: 'Dev Mode',
     intro: 'Oracle AI ready. Query verifications, escrows, or certificates.',
     placeholder: 'Query the oracle... e.g. GET /escrow?agent=buyer-001',
-    systemPrompt: `You are Oracle, a terse senior-engineer AI assistant for PoV Oracle (an AI agent notary/escrow service).
-Speak like a senior backend engineer. Be direct and concise. Use technical terminology freely — verifications, escrows, certificates, signatures, pubkeys, Ed25519.
-Show field names and IDs. Keep responses to 2-4 sentences. When data is found, summarize counts and key fields.
-When nothing found, say: "No records matched. Verify the agent_id or escrow_id and retry."`,
   },
   business: {
     subtitle: 'Business Intelligence',
     intro: "Good to see you. I can pull up transaction reports, escrow summaries, revenue activity, and deal history. What would you like to review?",
     placeholder: 'Ask about your business activity...',
-    systemPrompt: `You are Oracle, a sharp financial analyst and business intelligence assistant for PoV Oracle.
-Speak like a professional business consultant. Lead every response with dollar amounts, deal counts, and business impact.
-Use phrases like "I've located 3 transactions totaling $420.00" or "Your escrow pipeline currently holds $1,250 in active deals."
-Never show raw JSON or technical field names unless explicitly asked. Keep language professional and corporate.
-When no data is found, say exactly: "No activity recorded in this period. Once transactions begin processing they will appear here."`,
   },
   personal: {
     subtitle: 'Observer Mode',
     intro: "Welcome 👁️ I'm Oracle. I'll give you clear, plain-English summaries of what was verified, what was flagged, and why it matters — no jargon.",
     placeholder: 'Ask what was verified, flagged, or why something matters...',
-    systemPrompt: `You are Oracle, a clear and neutral observer assistant for PoV Oracle.
-Your job is to summarize what happened in plain English — what was verified, what was flagged, and why it matters.
-Use simple, precise language. No jargon, no technical terms. Short paragraphs.
-FORBIDDEN: "Ed25519", "lamports", "pubkey", "agent_id", "JSON", "API endpoint", "escrow_id".
-Instead say: "verification check" for verification, "held payment" for escrow, "proof record" for certificate.
-Always explain the significance: what was the outcome, does it matter, is there anything to act on.
-When results are found, lead with a clear summary: "Here's what happened:" followed by bullet points.
-When no data found, say: "Nothing on record for that. Try a different agent name or date range."`,
   },
 };
 
-async function runOracleQuery(userMessage, persona) {
-  // Determine intent and make API call
-  const lower = userMessage.toLowerCase();
-  let apiResult = null;
-  let apiCall = null;
-
-  // Extract potential IDs
-  const idMatch = userMessage.match(/[a-zA-Z0-9_-]{6,}/g);
-  const escrowIdMatch = idMatch?.find(id => id.toLowerCase().includes('escrow') || id.toLowerCase().includes('esc'));
-  const agentIdMatch = idMatch?.find(id => id.toLowerCase().includes('agent') || id.toLowerCase().includes('buyer') || id.toLowerCase().includes('seller'));
-  const anyId = idMatch?.[0];
-
-  if (lower.includes('escrow') && anyId) {
-    const endpoint = `/api/v1/oracle/get-escrow-status?escrow_id=${anyId}`;
-    apiCall = `GET ${endpoint}`;
-    try {
-      const res = await fetch(`${BASE_URL}${endpoint}`);
-      apiResult = await res.json();
-    } catch { apiResult = { error: 'fetch failed' }; }
-  } else if ((lower.includes('agent') || lower.includes('buyer') || lower.includes('seller') || lower.includes('transaction') || lower.includes('verification') || lower.includes('certificate')) && anyId) {
-    const qid = agentIdMatch || anyId;
-    const endpoint = `/api/v1/oracle/list-agent-escrows?agent_id=${qid}`;
-    apiCall = `GET ${endpoint}`;
-    try {
-      const res = await fetch(`${BASE_URL}${endpoint}`);
-      apiResult = await res.json();
-    } catch { apiResult = { error: 'fetch failed' }; }
-  } else if (lower.includes('list') || lower.includes('all') || lower.includes('recent') || lower.includes('yesterday') || lower.includes('today') || lower.includes('may') || lower.includes('april') || lower.includes('june')) {
-    const endpoint = `/api/v1/oracle/list-agent-escrows?agent_id=all`;
-    apiCall = `GET ${endpoint}`;
-    try {
-      const res = await fetch(`${BASE_URL}${endpoint}`);
-      apiResult = await res.json();
-    } catch { apiResult = { error: 'fetch failed' }; }
+/**
+ * Calls Anthropic Messages API. Uses the shared PoV Oracle system prompt (not persona-specific prompts).
+ */
+async function runOracleQuery(userMessage) {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!apiKey || String(apiKey).trim() === '') {
+    return {
+      answer:
+        'Anthropic API key is missing. Add VITE_ANTHROPIC_API_KEY to your .env (Vite exposes only variables prefixed with VITE_).',
+      apiCall: null,
+      apiResult: null,
+    };
   }
 
-  // Build AI prompt
-  const config = PERSONA_CONFIG[persona] || PERSONA_CONFIG.developer;
-  const contextStr = apiResult ? `\n\nDATA FROM API (${apiCall}):\n${JSON.stringify(apiResult, null, 2).slice(0, 2000)}` : '';
-  const prompt = `${config.systemPrompt}\n\nUser message: "${userMessage}"${contextStr}\n\nRespond to the user based on the data above. If there is no API data, answer from general knowledge about PoV Oracle.`;
-
   try {
-    const answer = await base44.integrations.Core.InvokeLLM({ prompt });
-    return { answer, apiCall, apiResult };
-  } catch {
-    return { answer: "Sorry, I couldn't process that right now.", apiCall, apiResult };
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': String(apiKey).trim(),
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500,
+        system: ANTHROPIC_SYSTEM,
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    });
+
+    const raw = await res.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return {
+        answer: res.ok ? 'Could not parse API response.' : `Request failed (${res.status}).`,
+        apiCall: null,
+        apiResult: null,
+      };
+    }
+
+    if (!res.ok) {
+      const msg = data?.error?.message || data?.message || raw.slice(0, 200) || `HTTP ${res.status}`;
+      return {
+        answer: `Anthropic API error (${res.status}): ${msg}`,
+        apiCall: null,
+        apiResult: null,
+      };
+    }
+
+    const block = Array.isArray(data.content) ? data.content.find((b) => b.type === 'text') : null;
+    const text = block?.text ?? (typeof data.content?.[0]?.text === 'string' ? data.content[0].text : null);
+    const answer = text != null && String(text).trim() !== '' ? String(text).trim() : 'No text in response.';
+
+    return { answer, apiCall: null, apiResult: null };
+  } catch (err) {
+    return {
+      answer: `Network error: ${err instanceof Error ? err.message : String(err)}`,
+      apiCall: null,
+      apiResult: null,
+    };
   }
 }
 
@@ -95,7 +95,12 @@ function RecordCard({ rec, persona }) {
   const id = rec.verification_id || rec.escrow_id || rec.id;
   const amount = rec.amount_usd != null ? `$${Number(rec.amount_usd).toFixed(2)}` : null;
   const status = rec.status || 'unknown';
-  const statusColor = status === 'passed' || status === 'released' || status === 'confirmed' ? 'text-emerald-400' : status === 'failed' || status === 'disputed' ? 'text-red-400' : 'text-yellow-400';
+  const statusColor =
+    status === 'passed' || status === 'released' || status === 'confirmed'
+      ? 'text-emerald-400'
+      : status === 'failed' || status === 'disputed'
+        ? 'text-red-400'
+        : 'text-yellow-400';
 
   return (
     <div className="bg-background/60 border border-border rounded-lg p-3 mt-2 text-xs">
@@ -105,7 +110,9 @@ function RecordCard({ rec, persona }) {
       </div>
       {amount && <p className="font-semibold mt-1">{amount}</p>}
       {(rec.buyer_agent_id || rec.asset_type) && (
-        <p className="text-muted-foreground mt-0.5">{rec.buyer_agent_id || ''} {rec.asset_type ? `· ${rec.asset_type}` : ''}</p>
+        <p className="text-muted-foreground mt-0.5">
+          {rec.buyer_agent_id || ''} {rec.asset_type ? `· ${rec.asset_type}` : ''}
+        </p>
       )}
     </div>
   );
@@ -117,12 +124,15 @@ export default function OracleAssistant() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || []; } catch { return []; }
+    try {
+      return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || [];
+    } catch {
+      return [];
+    }
   });
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Reset messages when persona changes
   const prevPersonaRef = useRef(persona);
   useEffect(() => {
     if (prevPersonaRef.current !== persona) {
@@ -133,7 +143,6 @@ export default function OracleAssistant() {
     }
   }, [persona]);
 
-  // Add intro message when first opened with no history
   useEffect(() => {
     if (open && messages.length === 0) {
       const intro = PERSONA_CONFIG[persona]?.intro || PERSONA_CONFIG.developer.intro;
@@ -150,7 +159,11 @@ export default function OracleAssistant() {
   }, [open]);
 
   useEffect(() => {
-    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages)); } catch {}
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages));
+    } catch {
+      /* ignore */
+    }
   }, [messages]);
 
   const send = async () => {
@@ -161,31 +174,33 @@ export default function OracleAssistant() {
     setMessages((m) => [...m, userMsg]);
     setLoading(true);
 
-    const { answer, apiCall, apiResult } = await runOracleQuery(text, persona);
+    const { answer, apiCall, apiResult } = await runOracleQuery(text);
 
     const records = Array.isArray(apiResult)
       ? apiResult
       : Array.isArray(apiResult?.escrows)
-      ? apiResult.escrows
-      : Array.isArray(apiResult?.verifications)
-      ? apiResult.verifications
-      : apiResult && !apiResult.error && typeof apiResult === 'object' && (apiResult.escrow_id || apiResult.verification_id)
-      ? [apiResult]
-      : [];
+        ? apiResult.escrows
+        : Array.isArray(apiResult?.verifications)
+          ? apiResult.verifications
+          : apiResult && !apiResult.error && typeof apiResult === 'object' && (apiResult.escrow_id || apiResult.verification_id)
+            ? [apiResult]
+            : [];
 
-    setMessages((m) => [...m, {
-      role: 'assistant',
-      content: answer,
-      apiCall: persona === 'developer' ? apiCall : null,
-      records,
-      id: Date.now() + 1,
-    }]);
+    setMessages((m) => [
+      ...m,
+      {
+        role: 'assistant',
+        content: answer,
+        apiCall: persona === 'developer' ? apiCall : null,
+        records,
+        id: Date.now() + 1,
+      },
+    ]);
     setLoading(false);
   };
 
   return (
     <>
-      {/* Floating Button */}
       <motion.button
         onClick={() => setOpen(true)}
         className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 transition-transform"
@@ -197,7 +212,6 @@ export default function OracleAssistant() {
         <Sparkles className="w-6 h-6" />
       </motion.button>
 
-      {/* Chat Panel */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -207,7 +221,6 @@ export default function OracleAssistant() {
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="fixed right-0 top-0 bottom-0 z-50 w-full sm:w-96 flex flex-col bg-card border-l border-border shadow-2xl"
           >
-            {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
@@ -220,12 +233,17 @@ export default function OracleAssistant() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setMessages([]); sessionStorage.removeItem(SESSION_KEY); }}
+                  type="button"
+                  onClick={() => {
+                    setMessages([]);
+                    sessionStorage.removeItem(SESSION_KEY);
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Clear
                 </button>
                 <button
+                  type="button"
                   onClick={() => setOpen(false)}
                   className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
                 >
@@ -234,25 +252,24 @@ export default function OracleAssistant() {
               </div>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] ${msg.role === 'user' ? '' : ''}`}>
-                    <div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground rounded-br-sm'
-                        : 'bg-secondary text-foreground rounded-bl-sm'
-                    }`}>
+                  <div className="max-w-[85%]">
+                    <div
+                      className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground rounded-br-sm'
+                          : 'bg-secondary text-foreground rounded-bl-sm'
+                      }`}
+                    >
                       {msg.content}
                     </div>
-                    {/* Dev API call display */}
                     {msg.apiCall && (
                       <div className="mt-1.5 px-2 py-1 bg-background/60 border border-border rounded-lg text-xs font-mono text-muted-foreground">
                         <span className="text-emerald-400">GET</span> {msg.apiCall.replace('GET ', '')}
                       </div>
                     )}
-                    {/* Record cards */}
                     {msg.records && msg.records.length > 0 && (
                       <div className="space-y-1">
                         {msg.records.slice(0, 5).map((rec, i) => (
@@ -278,7 +295,6 @@ export default function OracleAssistant() {
               <div ref={bottomRef} />
             </div>
 
-            {/* Input */}
             <div className="px-4 py-3 border-t border-border shrink-0">
               <div className="flex items-center gap-2 bg-secondary rounded-xl px-3 py-2">
                 <input
@@ -290,6 +306,7 @@ export default function OracleAssistant() {
                   className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 />
                 <button
+                  type="button"
                   onClick={send}
                   disabled={!input.trim() || loading}
                   className="p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-40 transition-opacity hover:opacity-90"
