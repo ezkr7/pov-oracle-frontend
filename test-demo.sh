@@ -19,7 +19,11 @@ BASE = os.environ["POV_BASE"].rstrip("/")
 SUFFIX = os.environ["POV_SUFFIX"]
 LISTING_URL = "https://pov-oracle-production.up.railway.app/api/status"
 BGAURDED_SELLER = "bgaurded-verification-service"
-BGAURDED_NOTORIZE = os.environ.get("BGAURDED_NOTORIZE_URL", "https://bgaurded.com/notarize").strip()
+# BGaurded Cloud notarization (Railway). Override with BGAURDED_NOTORIZE_URL if needed.
+BGAURDED_NOTORIZE = os.environ.get(
+    "BGAURDED_NOTORIZE_URL",
+    "https://bgaurded-cloud-production-749e.up.railway.app/notarize?agent_id=pov-oracle",
+).strip()
 
 BUYER_EMAIL = f"povdemo+{SUFFIX}-buyer@example.com"
 SELLER_EMAIL = f"povdemo+{SUFFIX}-seller@example.com"
@@ -168,21 +172,32 @@ else:
     print(f"WARN issue-pov-certificate HTTP {st}: {str(cert)[:400]}", flush=True)
 
 time.sleep(0.15)
-print("[4] BGaurded POST /notorize (best-effort) …", flush=True)
-# Same general shape as PoV Oracle → BGaurded notarization payloads (see bgaurded-client.ts).
+print("[4] BGaurded Cloud POST notarize (best-effort) …", flush=True)
+hc = rv.get("hallucination_check") if isinstance(rv.get("hallucination_check"), dict) else {}
+conf = hc.get("confidence_score")
+try:
+    conf_pct = int(round(float(conf) * 100)) if conf is not None else None
+except (TypeError, ValueError):
+    conf_pct = None
+conf_s = f"{conf_pct}%" if conf_pct is not None else "n/a"
 n_body = {
-    "event": "pov_demo_client_notarize",
-    "issued_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    "buyer_agent_id": BUYER_ID,
-    "seller_agent_id": BGAURDED_SELLER,
-    "manifest_id": f"demo-manifest-{SUFFIX}",
+    "action": f"PoV Oracle verified transaction for agent {BUYER_ID}",
+    "thought_process": (
+        f"PoV Oracle validated listing/counterparty claims for verification_id={vid}, "
+        f"evidence from {LISTING_URL}, model confidence: {conf_s}."
+    ),
+    "evidence_url": LISTING_URL,
+    "impact_score": 8,
+    "category": "ACTION",
+    "task_id": str(vid),
 }
-if out.get("verification_id"):
-    n_body["verification_id"] = str(out["verification_id"])
-if out.get("cert_ref"):
-    n_body["pov_certificate_sha256_hex"] = str(out["cert_ref"])
-
-bst, bj = req("POST", BGAURDED_NOTORIZE, n_body, timeout=5.0)
+bst, bj = req(
+    "POST",
+    BGAURDED_NOTORIZE,
+    n_body,
+    headers={"X-Partner-ID": "bgaurded"},
+    timeout=35.0,
+)
 out["bgaurded_note"] = f"HTTP {bst} {bj if isinstance(bj, dict) else str(bj)[:200]}"
 print(f"    {out['bgaurded_note']}", flush=True)
 if 200 <= bst < 300:
