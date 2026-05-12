@@ -17,7 +17,7 @@ export default function VerificationsCard({ data, loading, elapsed, onRefresh, o
       onRefresh={onRefresh}
       onClick={onClick}
       method="GET"
-      endpoint="/api/v1/oracle/list-agent-escrows"
+      endpoint="/api/v1/oracle/agent-history/demo-agent"
       elapsed={elapsed}
       data={data}
       persona={persona}

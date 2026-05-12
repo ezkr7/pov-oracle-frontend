@@ -26,6 +26,10 @@ export async function fetchEscrows() {
   return apiFetch('/api/v1/oracle/list-agent-escrows?agent_id=all');
 }
 
+export async function fetchVerifications() {
+  return apiFetch('/api/v1/oracle/agent-history/demo-agent');
+}
+
 export async function fetchEscrowDashboard() {
   // The /escrow endpoint is HTML, use the API status for data
   return apiFetch('/api/status');

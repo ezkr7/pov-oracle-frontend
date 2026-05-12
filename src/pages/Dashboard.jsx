@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { usePersona } from '@/lib/PersonaContext';
 import { useApiStatus } from '@/lib/useApiStatus';
-import { fetchStatus, fetchEscrows } from '@/lib/api';
+import { fetchStatus, fetchVerifications } from '@/lib/api';
 import VerificationsCard from '@/components/dashboard/VerificationsCard';
 import EscrowsCard from '@/components/dashboard/EscrowsCard';
 import CertificatesCard from '@/components/dashboard/CertificatesCard';
@@ -24,10 +24,19 @@ export default function Dashboard() {
   const loadData = useCallback(async () => {
     setLoading({ v: true, e: true, c: true });
 
-    // Fetch verifications (escrow list endpoint)
+    // Fetch verification history (demo agent)
     try {
-      const res = await fetchEscrows();
-      const items = Array.isArray(res.data) ? res.data : res.data?.escrows || [];
+      const res = await fetchVerifications();
+      const raw = Array.isArray(res.data?.verifications) ? res.data.verifications : [];
+      const items = raw.map((v) => ({
+        verification_id: v.verification_id,
+        passed: v.passed,
+        asset_type: v.asset_type,
+        created_at: v.created_at,
+        listing_hash: v.listing_hash,
+        status: v.passed === false ? 'failed' : 'passed',
+        agent_id: v.verification_id != null ? String(v.verification_id) : 'demo-agent',
+      }));
       setVerifications(items);
       setElapsed(prev => ({ ...prev, v: res.elapsed }));
     } catch { setVerifications([]); }
