@@ -26,8 +26,54 @@ export async function fetchEscrows() {
   return apiFetch('/api/v1/oracle/list-agent-escrows?agent_id=all');
 }
 
+const VERIFICATION_HISTORY_AGENT_IDS = [
+  'demo-agent',
+  'demo-agent-v2',
+  'demo-agent-2',
+  'demo-agent-3',
+  'demo-agent-4',
+  'demo-agent-5',
+  'demo-agent-6',
+  'demo-agent-7',
+  'demo-agent-8',
+  'demo-agent-9',
+  'demo-agent-10',
+];
+
 export async function fetchVerifications() {
-  return apiFetch('/api/v1/oracle/agent-history/demo-agent?limit=50');
+  const start = performance.now();
+  const results = await Promise.all(
+    VERIFICATION_HISTORY_AGENT_IDS.map((agentId) =>
+      apiFetch(`/api/v1/oracle/agent-history/${encodeURIComponent(agentId)}?limit=50`)
+    )
+  );
+  const elapsed = Math.round(performance.now() - start);
+
+  const byId = new Map();
+  for (const { data, ok } of results) {
+    if (!ok || !data) continue;
+    const arr = Array.isArray(data.verifications) ? data.verifications : [];
+    for (const v of arr) {
+      const vid = v?.verification_id ?? v?.id;
+      if (vid == null || vid === '') continue;
+      const key = String(vid);
+      if (!byId.has(key)) byId.set(key, v);
+    }
+  }
+
+  const verifications = [...byId.values()].sort((a, b) => {
+    const ta = Date.parse(a?.created_at) || 0;
+    const tb = Date.parse(b?.created_at) || 0;
+    return tb - ta;
+  });
+
+  const anyOk = results.some((r) => r.ok);
+  return {
+    data: { verifications },
+    elapsed,
+    ok: anyOk,
+    status: anyOk ? 200 : results.find((r) => r.status)?.status ?? 502,
+  };
 }
 
 export async function fetchEscrowDashboard() {
