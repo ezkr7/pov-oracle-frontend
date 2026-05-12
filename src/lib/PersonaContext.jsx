@@ -44,7 +44,7 @@ const personaTerms = {
 
 export function PersonaProvider({ children }) {
   const [persona, setPersonaState] = useState(() => {
-    return localStorage.getItem(PERSONA_KEY) || null;
+    return localStorage.getItem(PERSONA_KEY) || 'developer';
   });
   const [tutorialDone, setTutorialDoneState] = useState(() => {
     return localStorage.getItem(TUTORIAL_KEY) === 'true';
