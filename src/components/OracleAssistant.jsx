@@ -5,8 +5,7 @@ import { usePersona } from '@/lib/PersonaContext';
 
 const SESSION_KEY = 'oracle_chat_messages';
 
-const ANTHROPIC_SYSTEM =
-  'You are the PoV Oracle AI assistant. You help users understand their AI agent verification history, escrow transactions, and certificates. You are knowledgeable about blockchain notarization, hallucination detection, and AI agent accountability. Keep responses concise and helpful.';
+const ORACLE_CHAT_URL = 'https://pov-oracle-production.up.railway.app/api/v1/oracle/chat';
 
 const PERSONA_CONFIG = {
   developer: {
@@ -26,34 +25,13 @@ const PERSONA_CONFIG = {
   },
 };
 
-/**
- * Calls Anthropic Messages API. Uses the shared PoV Oracle system prompt (not persona-specific prompts).
- */
+/** Calls PoV Oracle Railway backend → Anthropic (avoids browser CORS to api.anthropic.com). */
 async function runOracleQuery(userMessage) {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey || String(apiKey).trim() === '') {
-    return {
-      answer:
-        'Anthropic API key is missing. Add VITE_ANTHROPIC_API_KEY to your .env (Vite exposes only variables prefixed with VITE_).',
-      apiCall: null,
-      apiResult: null,
-    };
-  }
-
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(ORACLE_CHAT_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': String(apiKey).trim(),
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        system: ANTHROPIC_SYSTEM,
-        messages: [{ role: 'user', content: userMessage }],
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userMessage }),
     });
 
     const raw = await res.text();
@@ -62,24 +40,20 @@ async function runOracleQuery(userMessage) {
       data = JSON.parse(raw);
     } catch {
       return {
-        answer: res.ok ? 'Could not parse API response.' : `Request failed (${res.status}).`,
+        answer: res.ok ? 'Could not parse chat API response.' : `Chat request failed (${res.status}).`,
         apiCall: null,
         apiResult: null,
       };
     }
 
-    if (!res.ok) {
-      const msg = data?.error?.message || data?.message || raw.slice(0, 200) || `HTTP ${res.status}`;
-      return {
-        answer: `Anthropic API error (${res.status}): ${msg}`,
-        apiCall: null,
-        apiResult: null,
-      };
-    }
-
-    const block = Array.isArray(data.content) ? data.content.find((b) => b.type === 'text') : null;
-    const text = block?.text ?? (typeof data.content?.[0]?.text === 'string' ? data.content[0].text : null);
-    const answer = text != null && String(text).trim() !== '' ? String(text).trim() : 'No text in response.';
+    const answer =
+      typeof data?.answer === 'string' && data.answer.trim() !== ''
+        ? data.answer.trim()
+        : typeof data?.error === 'string'
+          ? data.error
+          : res.ok
+            ? 'No answer field in response.'
+            : `Chat API error (${res.status}).`;
 
     return { answer, apiCall: null, apiResult: null };
   } catch (err) {
