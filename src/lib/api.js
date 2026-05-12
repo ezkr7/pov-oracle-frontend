@@ -76,9 +76,22 @@ export async function fetchVerifications() {
     return tb - ta;
   });
 
+  /** PoV has no GET /certificates list; issued certs are rows on agent-history with certificate_issued. */
+  const certificates = verifications
+    .filter((v) => v.certificate_issued === true)
+    .map((v) => ({
+      id: v.verification_id,
+      verification_id: v.verification_id,
+      asset_type: v.asset_type,
+      timestamp: v.created_at,
+      created_at: v.created_at,
+      owner_agent_id: v.owner_agent_id,
+      listing_hash: v.listing_hash,
+    }));
+
   const anyOk = results.some((r) => r.ok);
   return {
-    data: { verifications },
+    data: { verifications, certificates },
     elapsed,
     ok: anyOk,
     status: anyOk ? 200 : results.find((r) => r.status)?.status ?? 502,

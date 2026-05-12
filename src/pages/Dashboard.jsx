@@ -70,21 +70,23 @@ export default function Dashboard() {
       }
       const items = rawList.map(mapVerificationRow);
       setVerifications(items);
+      const certList = Array.isArray(res.data?.certificates) ? res.data.certificates : [];
+      console.log('[Dashboard] loadData: certificates (issued) count', certList.length);
+      setCertificates(certList);
       setElapsed((prev) => ({ ...prev, v: res.elapsed }));
     } catch (e) {
       console.error('[Dashboard] loadData: fetchVerifications threw', e);
       setVerifications([]);
+      setCertificates([]);
     }
     setLoading((prev) => ({ ...prev, v: false }));
 
     try {
       const res = await fetchStatus();
       setEscrows([]);
-      setCertificates([]);
       setElapsed((prev) => ({ ...prev, e: res.elapsed, c: res.elapsed }));
     } catch {
       setEscrows([]);
-      setCertificates([]);
     }
     setLoading((prev) => ({ ...prev, e: false, c: false }));
   }, []);

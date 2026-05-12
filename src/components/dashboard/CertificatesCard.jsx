@@ -16,7 +16,7 @@ export default function CertificatesCard({ data, loading, elapsed, onRefresh, on
       onRefresh={onRefresh}
       onClick={onClick}
       method="GET"
-      endpoint="/api/status"
+      endpoint="/api/v1/oracle/agent-history (certificate_issued)"
       elapsed={elapsed}
       data={data}
       persona={persona}
