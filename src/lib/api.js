@@ -38,6 +38,7 @@ const VERIFICATION_HISTORY_AGENT_IDS = [
   'demo-agent-8',
   'demo-agent-9',
   'demo-agent-10',
+  'demo-seller',
 ];
 
 export async function fetchVerifications() {
@@ -50,14 +51,22 @@ export async function fetchVerifications() {
   const elapsed = Math.round(performance.now() - start);
 
   const byId = new Map();
-  for (const { data, ok } of results) {
+  for (let i = 0; i < results.length; i++) {
+    const { data, ok } = results[i];
+    const requestedAgentId = VERIFICATION_HISTORY_AGENT_IDS[i];
     if (!ok || !data) continue;
-    const arr = Array.isArray(data.verifications) ? data.verifications : [];
-    for (const v of arr) {
+    const rows = Array.isArray(data.verifications)
+      ? data.verifications
+      : Array.isArray(data.records)
+        ? data.records
+        : [];
+    const ownerFromApi = typeof data.agent_id === 'string' ? data.agent_id : requestedAgentId;
+    for (const v of rows) {
       const vid = v?.verification_id ?? v?.id;
       if (vid == null || vid === '') continue;
       const key = String(vid);
-      if (!byId.has(key)) byId.set(key, v);
+      const enriched = { ...v, owner_agent_id: ownerFromApi };
+      if (!byId.has(key)) byId.set(key, enriched);
     }
   }
 
