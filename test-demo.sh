@@ -21,8 +21,6 @@ LISTING_URL = "https://pov-oracle-production.up.railway.app/api/status"
 BGAURDED_SELLER = "bgaurded-verification-service"
 BGAURDED_NOTORIZE = os.environ.get("BGAURDED_NOTORIZE_URL", "https://bgaurded.com/notarize").strip()
 
-BUYER_ID = "demo-agent"
-SELLER_ID = "demo-seller"
 BUYER_EMAIL = f"povdemo+{SUFFIX}-buyer@example.com"
 SELLER_EMAIL = f"povdemo+{SUFFIX}-seller@example.com"
 # Valid Solana pubkeys for registration
@@ -30,8 +28,8 @@ BUYER_WALLET = os.environ.get("POV_DEMO_BUYER_WALLET", "So1111111111111111111111
 SELLER_WALLET = os.environ.get("POV_DEMO_SELLER_WALLET", "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").strip()
 
 out = {
-    "buyer_id": BUYER_ID,
-    "seller_id": SELLER_ID,
+    "buyer_id": None,
+    "seller_id": None,
     "verification_passed": None,
     "verification_id": None,
     "certificate_issued": False,
@@ -61,31 +59,54 @@ def req(method: str, url: str, body=None, headers=None, timeout=10.0):
         return 0, {"error": str(e.reason) if getattr(e, "reason", None) else str(e)}
 
 
-def register(role: str, agent_id: str, email: str, wallet: str):
-    st, j = req(
-        "POST",
-        f"{BASE}/api/v1/oracle/register-agent",
-        {
-            "agent_id": agent_id,
-            "role": role,
-            "human_email": email,
-            "solana_wallet": wallet,
-            "display_name": f"Demo {role}",
-        },
-    )
-    if st != 200 or not j.get("registered"):
-        print(f"register-agent failed HTTP {st}: {j}", flush=True)
-        sys.exit(1)
-    key = j.get("api_key")
-    if not (isinstance(key, str) and key.startswith("pov_live_")):
-        print(f"register-agent missing api_key: {j}", flush=True)
-        sys.exit(1)
-    return key
+def _id_candidates(prefix: str):
+    """Fresh timestamp IDs first; then suffixes if that second collided or id was taken without api_key."""
+    yield f"{prefix}-{SUFFIX}"
+    for n in range(2, 500):
+        yield f"{prefix}-{SUFFIX}-{n}"
 
 
-print("[1] register-agent buyer + seller …", flush=True)
-buyer_key = register("buyer", BUYER_ID, BUYER_EMAIL, BUYER_WALLET)
-register("seller", SELLER_ID, SELLER_EMAIL, SELLER_WALLET)
+def register_until_api_key(role: str, email: str, wallet: str, id_prefix: str) -> tuple[str, str]:
+    """
+    POST register-agent until we get a fresh api_key.
+    Handles 'already registered' (no api_key) by trying the next unique agent_id.
+    """
+    last = None
+    for agent_id in _id_candidates(id_prefix):
+        st, j = req(
+            "POST",
+            f"{BASE}/api/v1/oracle/register-agent",
+            {
+                "agent_id": agent_id,
+                "role": role,
+                "human_email": email,
+                "solana_wallet": wallet,
+                "display_name": f"Demo {role}",
+            },
+        )
+        last = (agent_id, st, j)
+        key = j.get("api_key") if isinstance(j, dict) else None
+        if st == 200 and j.get("registered") and isinstance(key, str) and key.startswith("pov_live_"):
+            return agent_id, key
+        # Log and retry: collision, already registered without key, etc.
+        print(
+            f"    try {agent_id!r}: HTTP {st} registered={j.get('registered')!r} "
+            f"has_api_key={bool(isinstance(key, str) and key.startswith('pov_live_'))}",
+            flush=True,
+        )
+    print(f"register-agent failed: exhausted candidates. Last: {last}", flush=True)
+    sys.exit(1)
+
+
+print("[1] register-agent buyer …", flush=True)
+BUYER_ID, buyer_key = register_until_api_key("buyer", BUYER_EMAIL, BUYER_WALLET, "demo-agent")
+out["buyer_id"] = BUYER_ID
+print(f"REGISTERED buyer agent_id={BUYER_ID!r}", flush=True)
+
+print("[1b] register-agent seller …", flush=True)
+SELLER_ID, _seller_key = register_until_api_key("seller", SELLER_EMAIL, SELLER_WALLET, "demo-seller")
+out["seller_id"] = SELLER_ID
+print(f"REGISTERED seller agent_id={SELLER_ID!r}", flush=True)
 
 print("[2] request-verification (BGaurded seller, fee waived) …", flush=True)
 st, rv = req(
@@ -107,41 +128,44 @@ st, rv = req(
     timeout=22.0,
 )
 if st != 200:
-    print(f"    request-verification HTTP {st}: {str(rv)[:400]}", flush=True)
-else:
-    out["verification_passed"] = rv.get("verification_passed")
-    out["verification_id"] = rv.get("verification_id")
-    print(f"    verification_id={out['verification_id']!r} passed={out['verification_passed']!r}", flush=True)
-
+    print(f"FATAL request-verification HTTP {st}: {str(rv)[:800]}", flush=True)
+    sys.exit(1)
+out["verification_passed"] = rv.get("verification_passed")
+out["verification_id"] = rv.get("verification_id")
 vid = out["verification_id"]
 if not vid:
-    print("    (skip) no verification_id — certificate step omitted.", flush=True)
-else:
-    time.sleep(0.15)
-    print("[3] issue-pov-certificate …", flush=True)
-    st, cert = req(
-        "POST",
-        f"{BASE}/api/v1/oracle/issue-pov-certificate",
-        {
-            "verification_id": vid,
+    print(f"FATAL request-verification returned no verification_id: {str(rv)[:800]}", flush=True)
+    sys.exit(1)
+print(
+    f"VERIFIED verification_id={vid!r} verification_passed={out['verification_passed']!r}",
+    flush=True,
+)
+
+time.sleep(0.15)
+print("[3] issue-pov-certificate …", flush=True)
+st, cert = req(
+    "POST",
+    f"{BASE}/api/v1/oracle/issue-pov-certificate",
+    {
+        "verification_id": vid,
+        "agent_id": BUYER_ID,
+        "product_data": {"url": LISTING_URL},
+        "manifest": {
+            "manifest_id": f"demo-manifest-{SUFFIX}",
             "agent_id": BUYER_ID,
-            "product_data": {"url": LISTING_URL},
-            "manifest": {
-                "manifest_id": f"demo-manifest-{SUFFIX}",
-                "agent_id": BUYER_ID,
-                "counterparty_agent_id": BGAURDED_SELLER,
-                "items": [],
-            },
+            "counterparty_agent_id": BGAURDED_SELLER,
+            "items": [],
         },
-        headers={"X-API-Key": buyer_key},
-        timeout=12.0,
-    )
-    if st == 200 and cert.get("pov_certificate"):
-        out["certificate_issued"] = True
-        out["cert_ref"] = cert.get("bgaurded_ref") or cert.get("manifest_id")
-        print(f"    issued ref={out.get('cert_ref')!r}", flush=True)
-    else:
-        print(f"    issue-pov-certificate HTTP {st}: {str(cert)[:400]}", flush=True)
+    },
+    headers={"X-API-Key": buyer_key},
+    timeout=12.0,
+)
+if st == 200 and cert.get("pov_certificate"):
+    out["certificate_issued"] = True
+    out["cert_ref"] = cert.get("bgaurded_ref") or cert.get("manifest_id")
+    print(f"CERTIFICATE ISSUED ref={out.get('cert_ref')!r}", flush=True)
+else:
+    print(f"WARN issue-pov-certificate HTTP {st}: {str(cert)[:400]}", flush=True)
 
 time.sleep(0.15)
 print("[4] BGaurded POST /notorize (best-effort) …", flush=True)
@@ -170,6 +194,7 @@ print(" SUMMARY", flush=True)
 print("----------------------------------------------------------------", flush=True)
 print(f"  Buyer agent ID:        {BUYER_ID}", flush=True)
 print(f"  Seller agent ID:       {SELLER_ID}", flush=True)
+print(f"  verification_id:      {out['verification_id']}", flush=True)
 print(f"  verification_passed:  {out['verification_passed']}", flush=True)
 print(f"  Certificate issued:   {out['certificate_issued']}", flush=True)
 print(f"  BGaurded notarized:   {out['bgaurded_notarized']}", flush=True)
