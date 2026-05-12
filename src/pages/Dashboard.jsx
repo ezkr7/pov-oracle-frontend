@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { TrendingUp, DollarSign, CheckCircle, AlertTriangle } from 'lucide-react';
 import { usePersona } from '@/lib/PersonaContext';
 import { useApiStatus } from '@/lib/useApiStatus';
 import { fetchStatus, fetchVerifications } from '@/lib/api';
@@ -7,7 +8,6 @@ import VerificationsCard from '@/components/dashboard/VerificationsCard';
 import EscrowsCard from '@/components/dashboard/EscrowsCard';
 import CertificatesCard from '@/components/dashboard/CertificatesCard';
 import SdkSnippet from '@/components/dashboard/SdkSnippet';
-import BusinessStats from '@/components/dashboard/BusinessStats';
 import DetailModal from '@/components/DetailModal';
 
 function mapVerificationRow(v) {
@@ -126,6 +126,42 @@ export default function Dashboard() {
         ? 'Real-time overview of verifications, escrows, and certificates across all agent transactions.'
         : 'Live service metrics and recent activity. All data pulled from production endpoints.';
 
+  const ed25519Ok =
+    statusData?.ed25519_key_configured === true || statusData?.ed25519_key_configured === 'true';
+  const solanaOk =
+    statusData?.solana_rpc_configured === true || statusData?.solana_rpc_configured === 'true';
+
+  const statusTiles = [
+    {
+      label: 'Fee per Verification',
+      value: '$0.005 total',
+      icon: DollarSign,
+      color: 'text-amber-400',
+      bg: 'bg-amber-400/10',
+    },
+    {
+      label: 'Payment Mode',
+      value: (statusData?.payment_mode || 'solana').toUpperCase(),
+      icon: TrendingUp,
+      color: 'text-emerald-400',
+      bg: 'bg-emerald-400/10',
+    },
+    {
+      label: 'Solana RPC',
+      value: solanaOk ? 'Connected' : 'Offline',
+      icon: CheckCircle,
+      color: solanaOk ? 'text-emerald-400' : 'text-red-400',
+      bg: solanaOk ? 'bg-emerald-400/10' : 'bg-red-400/10',
+    },
+    {
+      label: 'Ed25519 Key',
+      value: ed25519Ok ? 'Configured' : 'Missing',
+      icon: ed25519Ok ? CheckCircle : AlertTriangle,
+      color: ed25519Ok ? 'text-emerald-400' : 'text-amber-400',
+      bg: ed25519Ok ? 'bg-emerald-400/10' : 'bg-amber-400/10',
+    },
+  ];
+
   console.log(
     '[Dashboard] render:',
     'verifications.length=',
@@ -147,7 +183,25 @@ export default function Dashboard() {
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">{heroSubtitle}</p>
       </motion.div>
 
-      <BusinessStats statusData={statusData} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {statusTiles.map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 * i }}
+            className="bg-card border border-border rounded-xl p-4"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`p-1.5 rounded-lg ${stat.bg}`}>
+                <stat.icon className={`w-3.5 h-3.5 ${stat.color}`} />
+              </div>
+              <span className="text-xs text-muted-foreground">{stat.label}</span>
+            </div>
+            <p className="text-lg font-bold">{stat.value}</p>
+          </motion.div>
+        ))}
+      </div>
 
       <div id="hero-cards" className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <VerificationsCard
