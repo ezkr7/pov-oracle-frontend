@@ -42,7 +42,7 @@ export function useApiStatus() {
       if (res.ok && res.data) {
         setQuote(res.data);
         setQuoteHistory((prev) => {
-          const price = parseFloat(res.data.sol_price_usd ?? res.data.price_usd ?? res.data.price ?? 0);
+          const price = parseFloat(res.data.sol_price_usd_live ?? res.data.sol_price_usd ?? res.data.price_usd ?? res.data.price ?? 0);
           if (!price) return prev;
           const next = [...prev, { price, time: Date.now() }].slice(-20);
           return next;

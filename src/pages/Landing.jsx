@@ -44,7 +44,8 @@ export default function Landing() {
   };
 
   const handleLogin = () => {
-    navigate('/dashboard');
+    const onboarded = localStorage.getItem('pov-oracle-onboarded');
+    navigate(onboarded === 'true' ? '/dashboard' : '/onboarding');
   };
 
   const handleSignUp = () => {

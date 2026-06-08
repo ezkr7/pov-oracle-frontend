@@ -8,9 +8,9 @@ export default function SolTicker({ quote, quoteHistory }) {
   const ref = useRef(null);
 
   const price = parseFloat(
-    quote?.sol_price_usd ?? quote?.price_usd ?? quote?.price ?? 0
+    quote?.sol_price_usd_live ?? quote?.sol_price_usd ?? quote?.price_usd ?? quote?.price ?? 0
   );
-  const solAmount = price > 0 ? (0.03 / price).toFixed(6) : '—';
+  const solAmount = price > 0 ? (0.005 / price).toFixed(6) : '—';
 
   const prev = quoteHistory.length >= 2 ? quoteHistory[quoteHistory.length - 2]?.price : null;
   const up = prev != null ? price >= prev : null;
@@ -59,7 +59,13 @@ export default function SolTicker({ quote, quoteHistory }) {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold">SOL / USD</span>
-                <span className="text-xs text-muted-foreground">via Coinbase</span>
+                <span className="text-xs text-muted-foreground">
+                via {quote?.price_source === 'coinGecko' ? 'CoinGecko'
+                  : quote?.price_source === 'binance' ? 'Binance'
+                  : quote?.price_source === 'dexScreener' ? 'DexScreener'
+                  : quote?.price_source === 'cache' ? 'cache'
+                  : 'live feed'}
+              </span>
               </div>
               <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
                 <X className="w-3.5 h-3.5" />
@@ -84,7 +90,7 @@ export default function SolTicker({ quote, quoteHistory }) {
               )}
             </div>
 
-            <p className="text-xs text-muted-foreground mb-3">$0.03 = {solAmount} SOL</p>
+            <p className="text-xs text-muted-foreground mb-3">$0.005 = {solAmount} SOL</p>
 
             {/* Sparkline */}
             {quoteHistory.length > 1 && (

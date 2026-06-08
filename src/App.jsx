@@ -23,7 +23,7 @@ function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/landing" element={<Landing />} />
             <Route path="/signup" element={<Onboarding />} />
-            <Route path="/login" element={<Dashboard />} />
+            <Route path="/login" element={<Onboarding />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/add-agent" element={<AddAgent />} />
             <Route element={<AppLayout />}>

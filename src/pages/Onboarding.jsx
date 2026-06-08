@@ -56,7 +56,8 @@ function StepAgent({ onNext }) {
 
   const handleNext = () => {
     const finalId = (mode === 'manual' ? agentId : pastedId) || `agent_${Math.random().toString(36).slice(2, 10)}`;
-    const finalNick = (mode === 'manual' ? nickname : '') || `Agent ${finalId.slice(0, 6)}`;
+    const shortId = finalId.replace(/^agent_/, '').slice(0, 8);
+    const finalNick = (mode === 'manual' ? nickname : '') || `Agent ${shortId}`;
     const agents = JSON.parse(localStorage.getItem('pov-oracle-agents') || '[]');
     const newAgent = { id: finalId, nickname: finalNick, role: mode === 'manual' ? role : 'buyer', wallet, status: 'active' };
     localStorage.setItem('pov-oracle-agents', JSON.stringify([...agents, newAgent]));
@@ -112,7 +113,28 @@ function StepAgent({ onNext }) {
 function StepPayment({ onNext }) {
   const [mode, setMode] = useState('wallet');
   const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
+  const [walletError, setWalletError] = useState('');
   const [agentWallet, setAgentWallet] = useState('');
+
+  const connectPhantom = async () => {
+    setWalletError('');
+    const provider = window?.solana;
+    if (!provider?.isPhantom) {
+      window.open('https://phantom.app/', '_blank');
+      setWalletError('Phantom not detected. Install it first, then come back.');
+      return;
+    }
+    try {
+      const response = await provider.connect();
+      const address = response.publicKey.toString();
+      setWalletAddress(address);
+      setWalletConnected(true);
+    } catch (err) {
+      setWalletError(err.message || 'Connection cancelled.');
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
       <h2 className="text-2xl font-bold text-white mb-2">Payment Setup</h2>
@@ -131,17 +153,20 @@ function StepPayment({ onNext }) {
           {walletConnected ? (
             <div className="flex items-center gap-3 p-4 rounded-xl" style={{ background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.2)' }}>
               <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-white">Phantom Wallet Connected</p>
-                <p className="text-xs font-mono mt-0.5" style={{ color: '#00ff88' }}>7xKXtg2...Phantom</p>
+                <p className="text-xs font-mono mt-0.5 truncate" style={{ color: '#00ff88' }}>{walletAddress}</p>
               </div>
             </div>
           ) : (
-            <button onClick={() => setWalletConnected(true)}
-              className="w-full py-3.5 rounded-xl font-semibold text-sm border transition-all hover:bg-white/5"
+            <button onClick={connectPhantom}
+              className="w-full py-3.5 rounded-xl font-semibold text-sm border transition-all hover:bg-white/5 flex items-center justify-center gap-2"
               style={{ borderColor: 'rgba(255,255,255,0.15)', color: '#e8eaf0' }}>
               🟣 Connect Phantom Wallet
             </button>
+          )}
+          {walletError && (
+            <p className="text-xs mt-1" style={{ color: '#f87171' }}>{walletError}</p>
           )}
           <p className="text-xs" style={{ color: '#4b5563' }}>Your wallet pays the $0.005 per verification fee automatically.</p>
         </div>
@@ -151,7 +176,7 @@ function StepPayment({ onNext }) {
           <InputField label="Agent Wallet Address" value={agentWallet} onChange={setAgentWallet} placeholder="Agent's Solana wallet address" helper="We accept payment at the time of each verification call" />
         </div>
       )}
-      <button onClick={() => onNext({ paymentMode: mode })}
+      <button onClick={() => onNext({ paymentMode: mode, walletAddress: walletConnected ? walletAddress : agentWallet })}
         className="mt-8 w-full py-3.5 rounded-xl font-semibold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2"
         style={{ background: '#00ff88', color: '#0a0a0f' }}>
         Continue <ArrowRight className="w-4 h-4" />
